@@ -297,6 +297,40 @@ describe('OtelBridge', () => {
       });
     });
 
+    describe('with span links', () => {
+      it('starts the OpenTelemetry span with links to the linked spans and keeps its own trace', () => {
+        const bridge = new OtelBridge();
+        const startSpan = vi.spyOn((bridge as any).otelTracer, 'startSpan');
+
+        const result = bridge.createSpan({
+          type: SpanType.MCP_SERVER_REQUEST,
+          name: 'tools/call weather',
+          attributes: {},
+          links: [
+            { traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '1a2b3c4d5e6f7081' },
+            { traceId: 'not-a-trace-id', spanId: 'nope' },
+          ],
+        });
+
+        const options = startSpan.mock.calls[0]![1] as { links?: Array<{ context: Record<string, unknown> }> };
+        expect(options.links).toEqual([
+          {
+            context: {
+              traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+              spanId: '1a2b3c4d5e6f7081',
+              traceFlags: 1,
+              isRemote: true,
+            },
+          },
+        ]);
+        expect(result?.traceId).not.toBe('a1b2c3d4e5f60718293a4b5c6d7e8f90');
+        expect(result?.externalParentSpanId).toBeUndefined();
+
+        startSpan.mockRestore();
+        bridge.shutdown();
+      });
+    });
+
     // Regression tests for https://github.com/mastra-ai/mastra/issues/15589
     //
     // When no OTEL SDK / tracer provider is registered, `trace.getTracer(...)`

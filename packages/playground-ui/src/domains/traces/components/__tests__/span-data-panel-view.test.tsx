@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import type { SpanDataPanelViewProps } from '../span-data-panel-view';
 import { spanFixture } from './fixtures/span-data-panel-view';
+import { LinkComponentProvider } from '@/lib/framework';
+import type { LinkComponentProviderProps } from '@/lib/framework';
 
 const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
@@ -125,5 +127,43 @@ describe('SpanDataPanelView — close', () => {
     rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SpanDataPanelView — linked spans', () => {
+  const link = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+  const paths = {
+    traceLink: (traceId: string, spanId?: string) => `/traces?traceId=${traceId}${spanId ? `&spanId=${spanId}` : ''}`,
+  } as unknown as LinkComponentProviderProps['paths'];
+  const TestLink = ({ href, children, ...rest }: { href: string; children?: React.ReactNode }) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
+  );
+
+  it('links to the span in the other trace, on any span of the trace', () => {
+    render(
+      <LinkComponentProvider Link={TestLink as never} navigate={() => {}} paths={paths}>
+        <SpanDataPanelView {...baseProps} span={{ ...spanFixture, parentSpanId: 'parent-1', links: [link] }} />
+      </LinkComponentProvider>,
+    );
+
+    expect(screen.getByText('Linked span')).toBeTruthy();
+    expect(screen.getByRole('link', { name: link.spanId }).getAttribute('href')).toBe(
+      `/traces?traceId=${link.traceId}&spanId=${link.spanId}`,
+    );
+  });
+
+  it('shows the linked span id without a link when the app has no trace route', () => {
+    render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, links: [link] }} />);
+
+    expect(screen.getByText(link.spanId)).toBeTruthy();
+    expect(screen.queryByRole('link', { name: link.spanId })).toBeNull();
+  });
+
+  it('shows no linked span for a span without valid links', () => {
+    render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, links: [{ traceId: 1 }, null] }} />);
+
+    expect(screen.queryByText('Linked span')).toBeNull();
   });
 });

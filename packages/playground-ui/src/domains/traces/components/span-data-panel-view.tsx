@@ -1,5 +1,6 @@
 import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
@@ -19,7 +20,16 @@ import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
+import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/lib/utils';
+
+/** The spans in other traces a span links to, such as the caller of a served MCP request. */
+function getLinkedSpans(span: SpanRecord): { traceId: string; spanId: string }[] {
+  return (span.links ?? []).flatMap(link => {
+    const { traceId, spanId } = (link ?? {}) as { traceId?: unknown; spanId?: unknown };
+    return typeof traceId === 'string' && typeof spanId === 'string' ? [{ traceId, spanId }] : [];
+  });
+}
 
 // Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
@@ -130,12 +140,20 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  const { Link, paths } = useLinkComponent();
   const usage = span.attributes?.usage as TokenUsage | undefined;
+  const linkedSpans = getLinkedSpans(span);
   const hasContext =
-    (isAnchor ?? span.parentSpanId == null) &&
-    Boolean(
-      span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
-    );
+    linkedSpans.length > 0 ||
+    ((isAnchor ?? span.parentSpanId == null) &&
+      Boolean(
+        span.tags?.length ||
+        span.sessionId ||
+        span.requestId ||
+        span.userId ||
+        span.organizationId ||
+        span.experimentId,
+      ));
 
   const detailsBody = (
     <>
@@ -219,6 +237,27 @@ function SpanDataPanelContent({
               )}
             </>
           )}
+          {/* Spans in other traces, such as the tool call that sent a served MCP request. */}
+          {linkedSpans.map(link => {
+            const href = paths.traceLink(link.traceId, link.spanId);
+            return (
+              <Fragment key={`${link.traceId}:${link.spanId}`}>
+                <DataKeysAndValues.Key>Linked span</DataKeysAndValues.Key>
+                {href ? (
+                  <DataKeysAndValues.ValueLink href={href} as={Link}>
+                    {link.spanId}
+                  </DataKeysAndValues.ValueLink>
+                ) : (
+                  <DataKeysAndValues.ValueWithCopyBtn
+                    copyTooltip="Copy linked span id to clipboard"
+                    copyValue={link.spanId}
+                  >
+                    {link.spanId}
+                  </DataKeysAndValues.ValueWithCopyBtn>
+                )}
+              </Fragment>
+            );
+          })}
         </DataKeysAndValues>
       )}
 

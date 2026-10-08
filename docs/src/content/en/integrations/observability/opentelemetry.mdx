@@ -756,6 +756,8 @@ Both services must have:
 1. W3C Trace Context propagator enabled
 1. Mastra with `OtelBridge` configured
 
+A Mastra `MCPServer` keeps its own trace for each request and links it to the caller. When a request carries a W3C `traceparent`, in the request `_meta` or as an HTTP header, the request span is created with an OpenTelemetry span link to the caller's span. See [Linking to the caller's trace](/reference/tools/mcp-server#linking-to-the-callers-trace).
+
 ### Using tags
 
 Tags help you categorize and filter traces in your OTEL backend. Add tags when executing agents or workflows:
